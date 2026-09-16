@@ -330,11 +330,5 @@ técnica documentada a propósito, no un descuido (ver
   corriendo y en que orden para una compra real: los tres procesos, el
   tunel, el login multiusuario, el enrolamiento, y como responde Wompi
   (sincrono y por webhook) para cada comercio.
-- `docs/viabilidad-multi-comercio-wompi.md` — por qué y cómo `agora/` soporta
-  varios comercios reales de Wompi en el mismo proceso.
 - `docs/variables-de-entorno.md` — la plantilla comentada del `.env`.
-- `docs/flujo.md` — runbook de comandos para el sistema v1 (`boveda/`).
-- `docs/informe-viabilidad-pagos-agenticos-co.md` — por qué Wompi + Nequi y no
-  otro riel colombiano.
-- `docs/decline-afe.md` — el primer cobro real y por qué lo rechazó el
-  antifraude de Wompi.
+
