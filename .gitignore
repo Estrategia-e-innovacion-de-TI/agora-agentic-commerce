@@ -30,3 +30,17 @@ agora_datos/
 *.db-wal
 *.db-shm
 *.db.bak-*
+
+
+docs/poc-documentation/
+docs/historico/
+docs/diagramas/
+docs/poc-documentation/
+docs/utils/
+docs/soporte/
+docs/arquitectura-agentes/
+
+
+
+
+Claude outputs/

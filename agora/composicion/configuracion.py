@@ -1,6 +1,6 @@
 """Lectura del entorno. El unico lugar de `agora/` autorizado a hacerlo.
 
-`docs/analisis-codigo.md` (hallazgo 5): hoy `os.environ` se lee dentro de
+`docs/historico/analisis-codigo.md` (hallazgo 5): hoy `os.environ` se lee dentro de
 `ClienteWompi.__init__` (`boveda/nucleo.py:124-126`), lo que hace imposible
 tener dos configuraciones en el mismo proceso y obliga a las pruebas a usar
 `monkeypatch.setenv`. Aqui se lee una vez, en el composition root, y circula
@@ -53,6 +53,55 @@ las de Wompi):
         arma sola a partir del `comercio_id`: ver el docstring de
         `entradas/webhooks/wompi.py`.
 
+    AGORA_CLASIFICADOR  hibrido | reglas | apagado   (default: hibrido)
+        Migracion a agentes, etapa 1 (`docs/etapa-1-agentes-clasificador-de-
+        intencion.md`): como decide el agente la intencion de cada mensaje
+        antes de ejecutar el turno.
+          hibrido  reglas deterministicas primero; si se abstienen, una
+                   llamada extra a DeepSeek para clasificar (con historial).
+          reglas   solo reglas; lo que no resuelven va por la ruta de
+                   respaldo (las seis herramientas, como antes). Sin costo
+                   extra de API.
+          apagado  sin clasificador: el agente de la etapa 7 tal cual. Es el
+                   interruptor para una demo si el enrutamiento molesta.
+        Solo tiene efecto si hay DEEPSEEK_API_KEY (sin ella no hay agente).
+
+    AGORA_TRAZAS        archivo .jsonl de trazabilidad del agente
+        (default: al lado de AGORA_BITACORA, `trazas.jsonl`)
+        Una linea por turno de chat, con la cadena completa de decisiones:
+        que clasifico el orquestador y con que confianza, que agente
+        atendio, que herramientas se le ofrecieron al modelo, cuales pidio,
+        cuales se le RECHAZARON por estar fuera de ruta, que documentacion
+        se le inyecto y de que archivos, y cuanto tardo.
+        Archivo aparte de `recibos.jsonl` a proposito: ese es la evidencia
+        del experimento de dinero y no se mezcla con transcripciones. Se lee
+        con `python -m agora.entradas.cli trazas --seguir`.
+        Contiene lo que escribio la persona: tratarlo como transcripcion.
+
+    AGORA_ORQUESTACION  grafo | directo   (default: grafo)
+        Migracion a agentes, etapa 3 (`docs/etapa-3-agentes-grafo-
+        langgraph.md`): como corre el turno.
+          grafo    el turno pasa por un grafo de LangGraph (orquestador ->
+                   trabajador -> fin). Mismo comportamiento que `directo`:
+                   los nodos llaman a los mismos metodos del agente. Exige
+                   `langgraph` instalado (`pip install -r requirements.txt`).
+          directo  el agente de las etapas 1-2 tal cual, sin grafo ni
+                   dependencia de LangGraph. Es el interruptor para una demo
+                   (o para un venv que todavia no instalo langgraph).
+        Solo tiene efecto si hay DEEPSEEK_API_KEY (sin ella no hay agente).
+
+    OPENAI_API_KEY      llave de OpenAI para embeddings (migracion a agentes,
+        etapa 2). Opcional, igual que DEEPSEEK_API_KEY: sin ella el nodo de
+        soporte contesta sin documentacion recuperada (como en la etapa 1) y
+        el resto de la app no cambia. Solo se usa para EMBEDDINGS de la
+        documentacion de soporte -- el chat sigue siendo DeepSeek.
+    AGORA_EMBEDDINGS_MODELO   default text-embedding-3-small.
+    AGORA_SOPORTE_DOCUMENTOS  carpeta del corpus de soporte (default:
+        docs/soporte). Solo se lee si hay OPENAI_API_KEY, y entonces tiene
+        que existir: una llave configurada con un corpus inexistente es un
+        error de configuracion, no algo para descubrir en la primera
+        pregunta de una persona.
+
     PAGADOR_EMAIL / PAGADOR_NOMBRE / PAGADOR_TELEFONO / PAGADOR_DOCUMENTO / PAGADOR_TIPO_DOC
         Igual que `boveda/nucleo.py:perfil_pagador`. Importan de verdad: un
         cobro sin `customer_data` es el perfil que el antifraude de Wompi lee
@@ -72,8 +121,13 @@ from ..dominio.pago.modelo import Ambiente
 
 RAIZ_REPO = Path(__file__).resolve().parent.parent.parent
 BITACORA_POR_DEFECTO = RAIZ_REPO / "agora_datos" / "recibos.jsonl"
+NOMBRE_DE_TRAZAS = "trazas.jsonl"
 SQLITE_POR_DEFECTO = RAIZ_REPO / "agora_datos" / "agora.db"
 COMERCIOS_WOMPI_POR_DEFECTO = RAIZ_REPO / "agora_datos" / "secretos" / "comercios_wompi.json"
+SOPORTE_DOCUMENTOS_POR_DEFECTO = RAIZ_REPO / "docs" / "soporte"
+# Mismo criterio que DEEPSEEK_MODELO_POR_DEFECTO: se repite aca en vez de
+# importarlo de `adaptadores/embeddings/proveedor_openai/config.py`.
+EMBEDDINGS_MODELO_POR_DEFECTO = "text-embedding-3-small"
 
 # `deepseek-chat` de nuevo aca, no importado de `adaptadores/llm/deepseek/
 # config.py`: `composicion/` no deberia depender de la forma interna de un
@@ -89,6 +143,13 @@ DEEPSEEK_MODELO_POR_DEFECTO = "deepseek-chat"
 # (ver `adaptadores/pasarelas/simulada/guion.py`).
 CORREO_POR_DEFECTO = "demo@agora.local"
 
+MODOS_CLASIFICADOR = ("hibrido", "reglas", "apagado")
+CLASIFICADOR_POR_DEFECTO = "hibrido"
+
+# Migracion a agentes, etapa 3 -- ver AGORA_ORQUESTACION en el docstring.
+MODOS_ORQUESTACION = ("grafo", "directo")
+ORQUESTACION_POR_DEFECTO = "grafo"
+
 
 class ConfiguracionInvalida(ValueError):
     pass
@@ -101,6 +162,11 @@ class ConfiguracionAgora:
     correo_pagador: str
     datos_pagador: dict[str, str] = field(default_factory=dict)
     bitacora_path: Path = BITACORA_POR_DEFECTO
+    # Trazabilidad del agente: una linea por turno de chat. Archivo APARTE de
+    # `bitacora_path` a proposito -- `recibos.jsonl` es la evidencia del
+    # experimento de dinero y no se diluye con transcripciones, que tienen
+    # otro volumen y otra vida util. Ver AGORA_TRAZAS en el docstring.
+    trazas_path: Path = BITACORA_POR_DEFECTO.parent / NOMBRE_DE_TRAZAS
     # Multi-comercio: registro de credenciales por comercio_id, no una
     # unica `ConfiguracionWompi`. Vacio cuando `pasarela == "simulada"` (no
     # hace falta credenciales de nadie para la demo sin dinero real).
@@ -114,8 +180,26 @@ class ConfiguracionAgora:
     # catalogo) no depende de que haya una llave de DeepSeek.
     deepseek_llave_api: str = ""
     deepseek_modelo: str = DEEPSEEK_MODELO_POR_DEFECTO
+    # Migracion a agentes, etapa 1 -- ver AGORA_CLASIFICADOR en el docstring.
+    clasificador_intencion: str = CLASIFICADOR_POR_DEFECTO
+    # Migracion a agentes, etapa 3 -- ver AGORA_ORQUESTACION en el docstring.
+    orquestacion: str = ORQUESTACION_POR_DEFECTO
+    # Migracion a agentes, etapa 2 -- ver OPENAI_API_KEY en el docstring.
+    openai_llave_api: str = ""
+    embeddings_modelo: str = EMBEDDINGS_MODELO_POR_DEFECTO
+    soporte_documentos_path: Path = SOPORTE_DOCUMENTOS_POR_DEFECTO
 
     def __post_init__(self) -> None:
+        if self.clasificador_intencion not in MODOS_CLASIFICADOR:
+            raise ConfiguracionInvalida(
+                f"AGORA_CLASIFICADOR='{self.clasificador_intencion}' invalido: use "
+                + " | ".join(f"'{m}'" for m in MODOS_CLASIFICADOR)
+            )
+        if self.orquestacion not in MODOS_ORQUESTACION:
+            raise ConfiguracionInvalida(
+                f"AGORA_ORQUESTACION='{self.orquestacion}' invalido: use "
+                + " | ".join(f"'{m}'" for m in MODOS_ORQUESTACION)
+            )
         if self.pasarela not in ("simulada", "wompi"):
             raise ConfiguracionInvalida(
                 f"AGORA_PASARELA='{self.pasarela}' invalido: use 'simulada' o 'wompi'"
@@ -219,12 +303,38 @@ def leer_configuracion(entorno: Mapping[str, str]) -> ConfiguracionAgora:
         datos_pagador.pop("legal_id_type", None)
 
     bitacora = Path(entorno["AGORA_BITACORA"]) if "AGORA_BITACORA" in entorno else BITACORA_POR_DEFECTO
+    # Por defecto, al lado de la bitacora de recibos. Derivarlo en vez de
+    # fijarlo hace que cualquiera que ya aisla `AGORA_BITACORA` (las pruebas,
+    # una corrida de demo en una carpeta aparte) aisle las trazas tambien,
+    # sin tener que enterarse de que existe una variable nueva.
+    trazas = (
+        Path(entorno["AGORA_TRAZAS"])
+        if "AGORA_TRAZAS" in entorno
+        else bitacora.parent / NOMBRE_DE_TRAZAS
+    )
     persistencia = entorno.get("AGORA_PERSISTENCIA", "memoria")
     sqlite_path = (
         Path(entorno["AGORA_SQLITE_PATH"]) if "AGORA_SQLITE_PATH" in entorno else SQLITE_POR_DEFECTO
     )
     deepseek_llave_api = entorno.get("DEEPSEEK_API_KEY", "")
     deepseek_modelo = entorno.get("DEEPSEEK_MODELO", DEEPSEEK_MODELO_POR_DEFECTO)
+    clasificador_intencion = entorno.get("AGORA_CLASIFICADOR", CLASIFICADOR_POR_DEFECTO)
+    orquestacion = entorno.get("AGORA_ORQUESTACION", ORQUESTACION_POR_DEFECTO)
+    openai_llave_api = entorno.get("OPENAI_API_KEY", "")
+    embeddings_modelo = entorno.get("AGORA_EMBEDDINGS_MODELO", EMBEDDINGS_MODELO_POR_DEFECTO)
+    soporte_documentos_path = (
+        Path(entorno["AGORA_SOPORTE_DOCUMENTOS"])
+        if "AGORA_SOPORTE_DOCUMENTOS" in entorno
+        else SOPORTE_DOCUMENTOS_POR_DEFECTO
+    )
+    if not soporte_documentos_path.is_absolute():
+        soporte_documentos_path = RAIZ_REPO / soporte_documentos_path
+    if openai_llave_api and not soporte_documentos_path.is_dir():
+        raise ConfiguracionInvalida(
+            f"OPENAI_API_KEY esta configurada pero no existe la carpeta de "
+            f"documentos de soporte '{soporte_documentos_path}' "
+            "(AGORA_SOPORTE_DOCUMENTOS, default docs/soporte)"
+        )
 
     wompi: dict[str, ConfiguracionWompi] = {}
     if pasarela == "wompi":
@@ -241,9 +351,15 @@ def leer_configuracion(entorno: Mapping[str, str]) -> ConfiguracionAgora:
         correo_pagador=correo,
         datos_pagador=datos_pagador,
         bitacora_path=bitacora,
+        trazas_path=trazas,
         wompi=wompi,
         persistencia=persistencia,
         sqlite_path=sqlite_path,
         deepseek_llave_api=deepseek_llave_api,
         deepseek_modelo=deepseek_modelo,
+        clasificador_intencion=clasificador_intencion,
+        orquestacion=orquestacion,
+        openai_llave_api=openai_llave_api,
+        embeddings_modelo=embeddings_modelo,
+        soporte_documentos_path=soporte_documentos_path,
     )

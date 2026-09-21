@@ -87,14 +87,18 @@ from ..aplicacion.enrolar_medio import (
     IniciarEnrolamiento,
 )
 from ..aplicacion.navegar_catalogo import NavegarCatalogo
+from ..aplicacion.rechazar_propuesta import RechazarPropuesta
 from ..aplicacion.revocar_medio import RevocarMedio
 from ..dominio.mandato.modelo import Verificador
 from ..dominio.pago.topes import TopesDuros
+from ..dominio.catalogo.modelo import Producto
 from ..puertos.autenticacion import HasherDeContrasenas
+from ..puertos.busqueda_productos import BuscadorSemanticoDeProductos
 from ..puertos.catalogo import RepositorioCatalogo
 from ..puertos.firma import SelectorDeFirmante
 from ..puertos.modelo_lenguaje import ModeloDeLenguaje
 from ..puertos.pasarela import SelectorDePasarela
+from ..puertos.recuperacion import BuscadorDocumental
 from ..puertos.repositorios import (
     LibroDeConsumo,
     RegistroDeEstados,
@@ -106,7 +110,7 @@ from ..puertos.repositorios import (
     RepositorioUsuarios,
 )
 from ..puertos.sistema import Bitacora, GeneradorIds, Reloj
-from .configuracion import ConfiguracionAgora
+from .configuracion import RAIZ_REPO, ConfiguracionAgora
 
 
 @dataclass(frozen=True)
@@ -140,6 +144,10 @@ class Contenedor:
     reloj: Reloj
     ids: GeneradorIds
     bitacora: Bitacora
+    # Trazabilidad del agente: la cadena de decisiones de cada turno de chat,
+    # en su propio .jsonl. Misma interfaz, otro archivo -- `recibos.jsonl` es
+    # la evidencia del experimento de dinero y no se diluye.
+    bitacora_trazas: Bitacora
     verificador: Verificador
     # -- etapa 5 -------------------------------------------------------- #
     carritos: RepositorioCarritos
@@ -157,6 +165,10 @@ class Contenedor:
     iniciar_sesion: IniciarSesion
     navegar_catalogo: NavegarCatalogo
     emitir_mandato: EmitirMandato
+    # Etapa 10: el contrapunto de `emitir_mandato` cuando el humano rechaza
+    # la propuesta en vez de firmarla -- ver el docstring de
+    # `aplicacion/rechazar_propuesta.py`.
+    rechazar_propuesta: RechazarPropuesta
     enrolar_medio: EnrolarMedio
     # -- etapa 8 (web): los mismos tres pasos que EnrolarMedio compone,
     # sueltos para que entradas/api/ pueda sondear el push de Nequi sin
@@ -171,6 +183,17 @@ class Contenedor:
     # deepseek_llave_api`. El resto del contenedor (mandatos, cobros,
     # catalogo, enrolamiento) no depende de que esto exista.
     modelo_lenguaje: ModeloDeLenguaje | None
+    # Migracion a agentes, etapa 2. `None` sin OPENAI_API_KEY -- el nodo de
+    # soporte contesta sin documentacion. Con llave, se arma sin tocar la red:
+    # el corpus se lee y se fragmenta ya, pero se embebe recien en la primera
+    # busqueda (ver `BuscadorDocumentalLangChain`). Con default para que las
+    # pruebas que arman un `Contenedor` a mano no tengan que conocerlo.
+    buscador_documental: BuscadorDocumental | None = None
+    # Migracion a agentes, etapa 4. `None` sin OPENAI_API_KEY -- el catalogo
+    # se navega con el match estructurado de siempre. Misma llave y mismo
+    # proveedor de embeddings que el buscador documental, pero OTRO indice:
+    # la decision 1 pide dos indices que nunca se mezclan.
+    buscador_semantico_productos: BuscadorSemanticoDeProductos | None = None
 
 
 def construir(
@@ -193,6 +216,9 @@ def construir(
     reloj = RelojDelSistema()
     ids = GeneradorIdsUuid()
     bitacora = BitacoraJsonl(config.bitacora_path, reloj)
+    # Segunda bitacora, mismo adaptador, archivo distinto: las trazas de chat
+    # no se mezclan con la evidencia de dinero (ver `configuracion.py`).
+    bitacora_trazas = BitacoraJsonl(config.trazas_path, reloj)
     verificador = VerificadorEd25519()
 
     mandatos: RepositorioMandatos
@@ -291,14 +317,17 @@ def construir(
     )
     iniciar_sesion = IniciarSesion(usuarios=usuarios, hasher=hasher)
 
+    buscador_semantico_productos = _construir_buscador_semantico_de_productos(config, catalogo)
     navegar_catalogo = NavegarCatalogo(
         catalogo=catalogo, carritos=carritos, ids=ids, propuestas=propuestas,
+        semantico=buscador_semantico_productos,
     )
     emitir_mandato = EmitirMandato(
         carritos=carritos, propuestas=propuestas, medios=medios, mandatos=mandatos,
         selector_firmante=selector_firmante, ids=ids, reloj=reloj, bitacora=bitacora,
         ambiente=config.ambiente,
     )
+    rechazar_propuesta = RechazarPropuesta(propuestas=propuestas, bitacora=bitacora)
     enrolar_medio = EnrolarMedio(
         selector_pasarela=selector_pasarela, medios=medios, bitacora=bitacora, ambiente=config.ambiente,
     )
@@ -320,6 +349,8 @@ def construir(
             )
         )
 
+    buscador_documental = _construir_buscador_documental(config)
+
     return Contenedor(
         config=config,
         ejecutar_intencion=ejecutar_intencion,
@@ -332,6 +363,7 @@ def construir(
         reloj=reloj,
         ids=ids,
         bitacora=bitacora,
+        bitacora_trazas=bitacora_trazas,
         verificador=verificador,
         carritos=carritos,
         propuestas=propuestas,
@@ -343,6 +375,7 @@ def construir(
         iniciar_sesion=iniciar_sesion,
         navegar_catalogo=navegar_catalogo,
         emitir_mandato=emitir_mandato,
+        rechazar_propuesta=rechazar_propuesta,
         enrolar_medio=enrolar_medio,
         iniciar_enrolamiento=iniciar_enrolamiento,
         consultar_enrolamiento=consultar_enrolamiento,
@@ -350,4 +383,87 @@ def construir(
         revocar_medio=revocar_medio,
         consultar_estado=consultar_estado,
         modelo_lenguaje=modelo_lenguaje,
+        buscador_documental=buscador_documental,
+        buscador_semantico_productos=buscador_semantico_productos,
+    )
+
+
+def _todos_los_productos(catalogo: RepositorioCatalogo) -> list[Producto]:
+    """Recorre el catalogo por comercio, que es la unica forma que da el
+    puerto (`buscar_productos` siempre pide un `comercio_id`). No es un
+    rodeo: esa forma es deliberada -- ver "TRES METODOS, NO UNO" en
+    `puertos/catalogo.py` -- y el catalogo simulado entra entero en memoria."""
+    return [
+        producto
+        for comercio in catalogo.buscar_comercios()
+        for producto in catalogo.buscar_productos(comercio.comercio_id)
+    ]
+
+
+def _construir_buscador_semantico_de_productos(
+    config: ConfiguracionAgora, catalogo: RepositorioCatalogo
+) -> BuscadorSemanticoDeProductos | None:
+    """Migracion a agentes, etapa 4. Sin OPENAI_API_KEY, `None`.
+
+    Sin variable de entorno propia, a proposito: no hay un caso realista en
+    el que alguien quiera embeddings para la documentacion de soporte pero
+    no para el catalogo -- son la misma llave, el mismo proveedor y, con un
+    catalogo de decenas de productos, un costo que se mide en centavos una
+    vez por arranque. Una bandera mas seria configuracion para un valor que
+    nadie va a cambiar.
+
+    El import va adentro por la misma razon que el del buscador documental:
+    es la unica parte del composition root que necesita numpy y el SDK de
+    OpenAI para esto, y el catalogo semantico es opcional.
+
+    Igual que en la etapa 2, construir NO toca la red: se lee el catalogo y
+    se guarda la lista, pero se embebe recien en la primera busqueda."""
+    if not config.openai_llave_api:
+        return None
+    from ..adaptadores.busqueda_productos.semantico_en_memoria import (
+        BuscadorSemanticoEnMemoria,
+    )
+    from ..adaptadores.embeddings.proveedor_openai import (
+        AdaptadorEmbeddingsOpenAI,
+        ConfiguracionEmbeddingsOpenAI,
+    )
+
+    return BuscadorSemanticoEnMemoria(
+        productos=_todos_los_productos(catalogo),
+        embeddings=AdaptadorEmbeddingsOpenAI(
+            ConfiguracionEmbeddingsOpenAI(
+                llave_api=config.openai_llave_api, modelo=config.embeddings_modelo,
+            )
+        ),
+    )
+
+
+def _construir_buscador_documental(config: ConfiguracionAgora) -> BuscadorDocumental | None:
+    """Migracion a agentes, etapa 2. Sin OPENAI_API_KEY, `None`.
+
+    Los imports van ADENTRO de la funcion, a proposito: son la unica parte
+    del composition root que depende de LangChain, y la documentacion de
+    soporte es opcional. Asi, un venv que todavia no corrio
+    `pip install -r requirements.txt` despues de esta etapa sigue levantando
+    la app (y la suite de las etapas anteriores) mientras no configure la
+    llave -- en vez de caerse entero con un `ImportError` por una funcion
+    que no esta usando."""
+    if not config.openai_llave_api:
+        return None
+    from ..adaptadores.embeddings.proveedor_openai import (
+        AdaptadorEmbeddingsOpenAI,
+        ConfiguracionEmbeddingsOpenAI,
+    )
+    from ..adaptadores.recuperacion.langchain_en_memoria import (
+        BuscadorDocumentalLangChain,
+        cargar_markdown,
+    )
+
+    return BuscadorDocumentalLangChain(
+        documentos=cargar_markdown(config.soporte_documentos_path, raiz=RAIZ_REPO),
+        embeddings=AdaptadorEmbeddingsOpenAI(
+            ConfiguracionEmbeddingsOpenAI(
+                llave_api=config.openai_llave_api, modelo=config.embeddings_modelo,
+            )
+        ),
     )
