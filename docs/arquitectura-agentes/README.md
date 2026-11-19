@@ -239,32 +239,3 @@ Los puertos que el módulo usa (`CompiladorDeGrafos`, `BuscadorDocumental`,
 implementaciones —LangGraph, LangChain, OpenAI, numpy— en `driven_adapters/`.
 `driven_adapters/orquestacion_langgraph/compilador.py` es el **único**
 módulo del proyecto que importa `langgraph`.
-
-## Los documentos
-
-| Documento | De qué trata |
-|---|---|
-| [`arquitectura-agentes-langgraph.md`](arquitectura-agentes-langgraph.md) | El diseño: las ocho decisiones y el plan de cinco etapas |
-| [`validacion-con-modelos-reales.md`](validacion-con-modelos-reales.md) | **La medición contra DeepSeek y OpenAI reales**, y lo que reveló |
-| [`etapa-1-agentes-clasificador-de-intencion.md`](etapa-1-agentes-clasificador-de-intencion.md) | Clasificar antes de ejecutar, sin LangGraph todavía |
-| [`etapa-2-agentes-soporte-rag-documental.md`](etapa-2-agentes-soporte-rag-documental.md) | El corpus de soporte y por qué no es `docs/` |
-| [`etapa-3-agentes-grafo-langgraph.md`](etapa-3-agentes-grafo-langgraph.md) | El loop de turnos envuelto como nodo de un grafo |
-| [`etapa-4-agentes-especializados-retrieval-hibrido.md`](etapa-4-agentes-especializados-retrieval-hibrido.md) | Los siete agentes y los tres peldaños |
-| [`etapa-5-pausa-humana.md`](etapa-5-pausa-humana.md) | La pausa tipada, y por qué **no** usa `interrupt()` |
-
----
-
-Los tres diagramas de arriba están además como archivo suelto en
-[`../diagramas/`](../diagramas/) —`05-grafo-del-turno`,
-`06-turno-con-firma-humana`, `07-retrieval-hibrido`— siguiendo la convención
-que ya usan los cuatro diagramas del proyecto, para que se puedan renderizar
-sueltos:
-
-```
-mmdc -i docs/diagramas/05-grafo-del-turno.mermaid -o grafo.png -b white -w 1700
-```
-
-**El archivo `.mermaid` es la copia canónica.** Si cambiás un diagrama,
-cambialo ahí y pegá el resultado acá — son dos copias a propósito, para que
-este documento se lea renderizado en GitHub y el diagrama siga estando donde
-el resto del proyecto los busca.
