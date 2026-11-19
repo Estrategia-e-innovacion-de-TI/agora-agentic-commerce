@@ -1,0 +1,59 @@
+---
+title: agora · que corre donde (python -m agora api / webhook)
+---
+flowchart LR
+    subgraph NAV["Navegador del titular"]
+        CHAT["chat.html<br/>login · chat · popup de firma<br/>Medios de pago"]
+    end
+
+    subgraph P1["Proceso 1 · python -m agora api · puerto 8002"]
+        direction TB
+        REST["api-rest<br/>REST + SSE"]
+        AGT["agente<br/>grafo del turno · 6 herramientas"]
+        UC1["casos de uso<br/>motor de pagos · TopesDuros 20.000/tx · 100.000/dia"]
+        SON["sondeo de pagos pendientes<br/>hilo de fondo"]
+    end
+
+    subgraph P2["Proceso 2 · python -m agora webhook · puerto 8001"]
+        HOOK["webhook-wompi<br/>POST /pagos/wompi/transacciones/{comercio_id}"]
+        UC2["ConciliarEventoUseCase"]
+    end
+
+    TUN["tunel publico<br/>ngrok / cloudflared"]
+
+    DB[("agora_datos/agora.db · SQLite WAL<br/>usuarios · llaves · medios · mandatos<br/>consumo · carritos · propuestas · estados")]
+    LOG[("agora_datos/<br/>recibos.jsonl · trazas.jsonl")]
+
+    subgraph EXT["Servicios externos"]
+        DS["DeepSeek<br/>modelo de lenguaje"]
+        OAI["OpenAI<br/>embeddings (opcional)"]
+        WOMPI["Wompi<br/>credenciales por comercio"]
+        NEQUI["Nequi<br/>cuenta real del titular"]
+    end
+
+    CHAT <-->|HTTP + SSE| REST
+    REST --> AGT
+    AGT -->|"mandato_id opacos"| UC1
+    AGT --> DS
+    AGT --> OAI
+    UC1 --> DB
+    UC1 --> LOG
+    UC1 -->|"cobrar · PENDING"| WOMPI
+    WOMPI -->|debita| NEQUI
+    WOMPI -->|transaction.updated| TUN --> HOOK
+    HOOK --> UC2 --> DB
+    SON -->|consulta estados| DB
+
+    AGT x-.-x|"sin credenciales de pago"| WOMPI
+
+    classDef nav fill:#1e3a5f,stroke:#4a90d9,color:#e8f0f8
+    classDef nucleo fill:#2f4f3d,stroke:#6fbf8f,color:#e8f8ee
+    classDef agente fill:#5c3d2f,stroke:#d99a6f,color:#f8f0e8
+    classDef ext fill:#3d2f5c,stroke:#9b7fc4,color:#f0e8f8
+    classDef datos fill:#5c2f3d,stroke:#d96f8f,color:#f8e8ee
+
+    class CHAT nav
+    class REST,UC1,SON,HOOK,UC2,TUN nucleo
+    class AGT agente
+    class DS,OAI,WOMPI,NEQUI ext
+    class DB,LOG datos

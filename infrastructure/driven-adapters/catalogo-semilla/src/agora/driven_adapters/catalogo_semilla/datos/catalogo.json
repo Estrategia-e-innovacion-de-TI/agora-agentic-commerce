@@ -1,0 +1,308 @@
+{
+  "comercios": [
+    {
+      "comercio_id": "com_a6066287f648",
+      "nombre": "Dulcería La Golosina",
+      "categoria": "confites",
+      "descripcion": "Dulcería de barrio en Bogotá: chocolates, gomitas y confites al detal, para el antojo de cada día.",
+      "simulado": false
+    },
+    {
+      "comercio_id": "com_77405f295d71",
+      "nombre": "Papelería El Lápiz Feliz",
+      "categoria": "papeleria",
+      "descripcion": "Papelería y miscelánea escolar en Bogotá: lo básico para el colegio o la oficina, al detal y a buen precio.",
+      "simulado": false
+    }
+  ],
+  "productos": [
+    {
+      "producto_id": "prd_e4544c48a5f2",
+      "comercio_id": "com_a6066287f648",
+      "nombre": "Chocolatina Cremosa",
+      "descripcion": "Chocolatina de leche cremosa, tableta individual de 30 g.",
+      "precio": {
+        "centavos": 140000,
+        "moneda": "COP"
+      },
+      "categoria": "confites",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_6d62e0e1ebe9",
+      "comercio_id": "com_a6066287f648",
+      "nombre": "Bolsa de Gomitas Surtidas",
+      "descripcion": "Gomitas de frutas surtidas, bolsa individual de 40 g.",
+      "precio": {
+        "centavos": 160000,
+        "moneda": "COP"
+      },
+      "categoria": "confites",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_80ef505c3fa7",
+      "comercio_id": "com_a6066287f648",
+      "nombre": "Paleta de Caramelo Grande",
+      "descripcion": "Paleta de caramelo macizo sabor a fresa, tamaño grande.",
+      "precio": {
+        "centavos": 150000,
+        "moneda": "COP"
+      },
+      "categoria": "confites",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_691275d14b1f",
+      "comercio_id": "com_a6066287f648",
+      "nombre": "Chicles de Menta x10",
+      "descripcion": "Paquete de 10 chicles sabor menta fuerte.",
+      "precio": {
+        "centavos": 170000,
+        "moneda": "COP"
+      },
+      "categoria": "confites",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_1c70dcd42208",
+      "comercio_id": "com_a6066287f648",
+      "nombre": "Galletas Rellenas de Chocolate",
+      "descripcion": "Paquete de galletas rellenas con crema de chocolate, 3 unidades.",
+      "precio": {
+        "centavos": 180000,
+        "moneda": "COP"
+      },
+      "categoria": "confites",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_0d054f0f2dec",
+      "comercio_id": "com_a6066287f648",
+      "nombre": "Bombones de Leche x6",
+      "descripcion": "Caja pequeña con 6 bombones de chocolate con leche.",
+      "precio": {
+        "centavos": 190000,
+        "moneda": "COP"
+      },
+      "categoria": "confites",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_fa42366af765",
+      "comercio_id": "com_a6066287f648",
+      "nombre": "Caramelos Ácidos Surtidos",
+      "descripcion": "Bolsa de caramelos ácidos de sabores surtidos, 50 g.",
+      "precio": {
+        "centavos": 150000,
+        "moneda": "COP"
+      },
+      "categoria": "confites",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_73d6e86a9afc",
+      "comercio_id": "com_a6066287f648",
+      "nombre": "Barra de Maní Garrapiñado",
+      "descripcion": "Barra crocante de maní garrapiñado, 35 g.",
+      "precio": {
+        "centavos": 170000,
+        "moneda": "COP"
+      },
+      "categoria": "confites",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_0fa2d060b922",
+      "comercio_id": "com_a6066287f648",
+      "nombre": "Mini Donas Glaseadas x3",
+      "descripcion": "Paquete de 3 mini donas con glaseado dulce.",
+      "precio": {
+        "centavos": 190000,
+        "moneda": "COP"
+      },
+      "categoria": "confites",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_35448c400ac4",
+      "comercio_id": "com_a6066287f648",
+      "nombre": "Chupetas de Frutas x5",
+      "descripcion": "Paquete de 5 chupetas pequeñas sabor a frutas.",
+      "precio": {
+        "centavos": 160000,
+        "moneda": "COP"
+      },
+      "categoria": "confites",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_63d879a4e272",
+      "comercio_id": "com_a6066287f648",
+      "nombre": "Chocolate con Almendras",
+      "descripcion": "Tableta de chocolate con trozos de almendra, 25 g.",
+      "precio": {
+        "centavos": 200000,
+        "moneda": "COP"
+      },
+      "categoria": "confites",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_58d5584b71cc",
+      "comercio_id": "com_a6066287f648",
+      "nombre": "Malvaviscos Cubiertos de Chocolate",
+      "descripcion": "Bolsa de malvaviscos bañados en chocolate, 6 unidades.",
+      "precio": {
+        "centavos": 180000,
+        "moneda": "COP"
+      },
+      "categoria": "confites",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_9bf6b5f4049c",
+      "comercio_id": "com_77405f295d71",
+      "nombre": "Lápiz de Grafito HB",
+      "descripcion": "Lápiz de grafito HB, cuerpo hexagonal de madera.",
+      "precio": {
+        "centavos": 150000,
+        "moneda": "COP"
+      },
+      "categoria": "papeleria",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_3f444f752686",
+      "comercio_id": "com_77405f295d71",
+      "nombre": "Borrador de Nata Blanco",
+      "descripcion": "Borrador de nata blanco, no mancha el papel.",
+      "precio": {
+        "centavos": 150000,
+        "moneda": "COP"
+      },
+      "categoria": "papeleria",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_f5ded03ed040",
+      "comercio_id": "com_77405f295d71",
+      "nombre": "Sacapuntas Metálico",
+      "descripcion": "Sacapuntas metálico de un solo orificio, con depósito.",
+      "precio": {
+        "centavos": 160000,
+        "moneda": "COP"
+      },
+      "categoria": "papeleria",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_2ccc9b640d47",
+      "comercio_id": "com_77405f295d71",
+      "nombre": "Cuaderno Pequeño Cuadriculado",
+      "descripcion": "Cuaderno de 50 hojas cuadriculadas, tamaño bolsillo.",
+      "precio": {
+        "centavos": 200000,
+        "moneda": "COP"
+      },
+      "categoria": "papeleria",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_0eaa5421cf4a",
+      "comercio_id": "com_77405f295d71",
+      "nombre": "Marcador Fluorescente",
+      "descripcion": "Marcador resaltador de punta biselada, tinta fluorescente.",
+      "precio": {
+        "centavos": 180000,
+        "moneda": "COP"
+      },
+      "categoria": "papeleria",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_30eb1af7efa3",
+      "comercio_id": "com_77405f295d71",
+      "nombre": "Bolígrafo de Gel Negro",
+      "descripcion": "Bolígrafo de tinta gel negra, punta de 0.7 mm.",
+      "precio": {
+        "centavos": 170000,
+        "moneda": "COP"
+      },
+      "categoria": "papeleria",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_9d9040b0c865",
+      "comercio_id": "com_77405f295d71",
+      "nombre": "Corrector Líquido",
+      "descripcion": "Corrector líquido tipo lápiz, secado rápido.",
+      "precio": {
+        "centavos": 190000,
+        "moneda": "COP"
+      },
+      "categoria": "papeleria",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_859b1770e640",
+      "comercio_id": "com_77405f295d71",
+      "nombre": "Regla de 15 cm",
+      "descripcion": "Regla plástica transparente de 15 centímetros.",
+      "precio": {
+        "centavos": 160000,
+        "moneda": "COP"
+      },
+      "categoria": "papeleria",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_d627480f9c64",
+      "comercio_id": "com_77405f295d71",
+      "nombre": "Tijeras Escolares Punta Roma",
+      "descripcion": "Tijeras escolares de punta roma, mango ergonómico.",
+      "precio": {
+        "centavos": 190000,
+        "moneda": "COP"
+      },
+      "categoria": "papeleria",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_4124742a3a1a",
+      "comercio_id": "com_77405f295d71",
+      "nombre": "Pegante en Barra",
+      "descripcion": "Barra de pegante escolar, 8 g, lavable.",
+      "precio": {
+        "centavos": 140000,
+        "moneda": "COP"
+      },
+      "categoria": "papeleria",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_1827833e4fa4",
+      "comercio_id": "com_77405f295d71",
+      "nombre": "Resaltador Amarillo",
+      "descripcion": "Resaltador de tinta amarilla, punta biselada.",
+      "precio": {
+        "centavos": 160000,
+        "moneda": "COP"
+      },
+      "categoria": "papeleria",
+      "disponibilidad": "en_stock"
+    },
+    {
+      "producto_id": "prd_39d17a5f5c28",
+      "comercio_id": "com_77405f295d71",
+      "nombre": "Paquete de Post-it Pequeño",
+      "descripcion": "Bloc de notas adhesivas pequeñas, 50 hojas.",
+      "precio": {
+        "centavos": 200000,
+        "moneda": "COP"
+      },
+      "categoria": "papeleria",
+      "disponibilidad": "en_stock"
+    }
+  ]
+}

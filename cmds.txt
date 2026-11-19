@@ -1,0 +1,12 @@
+# Levantar api
+python -m agora api
+
+#Webhook
+python -m agora webhook
+
+# Conectar tunel ngrok
+ngrok http --url https://rhyme-armless-private.ngrok-free.dev 8001
+
+
+# Validar modelos
+python scripts/validar_con_modelos_reales.py

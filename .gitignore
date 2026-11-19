@@ -1,0 +1,43 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.agentic-fraud-venv/
+
+# Llaves de API. Nunca versionar.
+.env
+.env.*
+
+
+# Cache local de fuentes de pago. Un payment_source_id de produccion
+# es tan sensible como una credencial: quien lo tiene puede cobrar.
+data/private/*.json
+
+# Datos de agora: trazas .jsonl, la base SQLite (mandatos, medios de pago y
+# consumo real) y las llaves de firma en `agora_datos/secretos/`.
+agora_datos/
+*.db
+*.db-wal
+*.db-shm
+*.db.bak-*
+
+# Documentacion interna
+docs/poc-documentation/*
+#Info de utilidad para desarrollo
+docs/utils/*
+# Info para el agente de soporte. No se versiona
+docs/soporte/*
+# Info evolucion de arquitectura. Solo incluir README
+docs/arquitectura-agentes/*
+# #README necesario de arq agentes
+!docs/arquitectura-agentes/README.md
+
+# evolucion versiones
+evolucion-refactor/*
+
+
+
+
+# pip install -e .
+*.egg-info/
+build/

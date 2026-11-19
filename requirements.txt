@@ -1,0 +1,3 @@
+# Las dependencias viven en pyproject.toml. Esto instala el proyecto en modo
+# editable con las de desarrollo (pytest). Correr desde la raiz del repo.
+-e .[dev]

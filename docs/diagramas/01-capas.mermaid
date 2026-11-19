@@ -1,0 +1,80 @@
+---
+title: agora · Clean Architecture de Bancolombia · modulos y regla de dependencia
+---
+flowchart TB
+    subgraph APPS["applications/app-service · el unico que conoce a todos"]
+        direction LR
+        MAIN["main.py<br/>python -m agora api | webhook | cli | crear-usuario | generar-catalogo"]
+        CONF["config/<br/>configuracion · contenedor · agente"]
+    end
+
+    subgraph EP["infrastructure/entry-points · traducen y delegan en casos de uso"]
+        direction LR
+        API["api-rest<br/>FastAPI · REST + SSE · chat.html"]
+        WH["webhook-wompi<br/>transaction.updated por comercio_id"]
+        CLI["cli<br/>operacion · chat · trazas"]
+    end
+
+    subgraph UC["domain/usecase · un caso de uso por carpeta"]
+        direction LR
+        EJ["EjecutarIntencionUseCase<br/><small>el motor de pagos</small>"]
+        PC["PagarCarritoUseCase"]
+        EM["EmitirMandatoUseCase"]
+        EN["EnrolarMedio · Iniciar/Consultar/<br/>ConfirmarEnrolamientoUseCase"]
+        CE["ConciliarEventoUseCase"]
+        NC["NavegarCatalogoUseCase<br/><small>3 peldanos de busqueda</small>"]
+        OT["RegistrarUsuario · IniciarSesion<br/>RevocarMedio · RechazarPropuesta<br/>ConsultarEstado · Listar*"]
+    end
+
+    subgraph AG["domain/usecase/agente · FRONTERA DURA · no importa otro caso de uso, ni adaptadores, ni gateways de pago o firma"]
+        direction LR
+        HERR["herramientas.py<br/>6 herramientas · PROHIBIDAS"]
+        GRA["grafo.py · agentes.py<br/>orquestador + 7 agentes"]
+        CLAS["clasificacion/<br/>reglas · modelo · cadena"]
+        PAU["pausa.py<br/>PausaDelTurno · DecisionHumana"]
+        OTA["conversacion · contexto_documental<br/>nodos · politica · traza"]
+    end
+
+    subgraph MOD["domain/model · entidades + gateways · solo biblioteca estandar"]
+        direction LR
+        MAN["mandato/<br/>Mandato · Intencion · Dictamen<br/><small>gateways: repositorios · firma</small>"]
+        PAG["pago/<br/>MedioDePagoRef · TopesDuros<br/><small>gateways: pasarela · repositorios</small>"]
+        CAT["catalogo/<br/>Comercio · Producto · Carrito<br/><small>gateways: catalogo · busqueda · repositorios</small>"]
+        USR["usuario/<br/>Usuario<br/><small>gateways: autenticacion · repositorios</small>"]
+        AGM["agente/<br/>TipoDeIntencion · ContextoInyectado<br/><small>gateways: modelo_lenguaje · orquestacion · recuperacion</small>"]
+        COM["commons/<br/>Dinero · errores<br/><small>gateways: Reloj · GeneradorIds · Bitacora</small>"]
+    end
+
+    subgraph DA["infrastructure/driven-adapters · implementan gateways · un modulo por tecnologia"]
+        direction LR
+        D1["pasarela-wompi · pasarela-simulada<br/>selector-pasarelas"]
+        D2["persistencia-sqlite · persistencia-memoria<br/>catalogo-semilla"]
+        D3["llm-deepseek · embeddings-openai<br/>recuperacion-langchain · busqueda-semantica-memoria<br/>orquestacion-langgraph"]
+        D4["firma-ed25519 · hasher-pbkdf2<br/>bitacora-jsonl · sistema"]
+    end
+
+    APPS -->|arma e inyecta| EP
+    APPS -->|construye| DA
+    APPS -->|construye| UC
+    EP --> UC
+    EP -.->|recibe armado| AG
+    AG -->|"solo callables cerrados por app-service<br/>mandato_id opacos"| UC
+    AG --> MOD
+    UC --> MOD
+    DA -.->|implementan gateways| MOD
+
+    AG x-.-x|"prohibido: tests/arquitectura/test_fronteras.py falla el build"| DA
+
+    classDef modelo fill:#1e3a5f,stroke:#4a90d9,color:#e8f0f8
+    classDef caso fill:#3d2f5c,stroke:#9b7fc4,color:#f0e8f8
+    classDef adaptador fill:#2f4f3d,stroke:#6fbf8f,color:#e8f8ee
+    classDef agente fill:#5c3d2f,stroke:#d99a6f,color:#f8f0e8
+    classDef entrada fill:#4a4a4a,stroke:#999,color:#eee
+    classDef raiz fill:#5c2f3d,stroke:#d96f8f,color:#f8e8ee
+
+    class MAN,PAG,CAT,USR,AGM,COM modelo
+    class EJ,PC,EM,EN,CE,NC,OT caso
+    class D1,D2,D3,D4 adaptador
+    class HERR,GRA,CLAS,PAU,OTA agente
+    class API,WH,CLI entrada
+    class MAIN,CONF raiz

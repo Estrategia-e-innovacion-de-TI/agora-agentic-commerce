@@ -1,0 +1,392 @@
+"""Lectura del entorno. El unico lugar de `agora/` autorizado a hacerlo.
+
+Leer `os.environ` dentro de un adaptador (por ejemplo, en el constructor del
+cliente de Wompi) haria imposible tener dos configuraciones en el mismo proceso
+y obligaria a las pruebas a usar `monkeypatch.setenv`. Aqui se lee una vez, en
+el app-service, y circula despues como objetos inmutables.
+
+Variables reconocidas (ver tambien `docs/variables-de-entorno.md`, que documenta
+las de Wompi):
+
+    AGORA_AMBIENTE      sandbox | produccion     (default: sandbox)
+    AGORA_PASARELA      simulada | wompi         (default: simulada)
+    AGORA_BITACORA      ruta del .jsonl propio de agora/ (default: agora_datos/recibos.jsonl)
+    AGORA_PERSISTENCIA  memoria | sqlite         (default: memoria)
+    AGORA_SQLITE_PATH   ruta del archivo SQLite (default: agora_datos/agora.db).
+        Solo se lee si AGORA_PERSISTENCIA=sqlite.
+
+    AGORA_WOMPI_COMERCIOS
+        Multi-comercio (1 de septiembre de 2026): ruta a un JSON con las
+        credenciales de CADA comercio real de Wompi, indexado por el mismo
+        `comercio_id` que usa el catalogo (`driven_adapters/
+        semilla/datos/catalogo.json`). Solo se lee si AGORA_PASARELA=wompi.
+        Default: agora_datos/secretos/comercios_wompi.json (ya en
+        `.gitignore`, igual que el resto de `agora_datos/secretos/`) --
+        el puente remoto no deja escribir archivos que empiecen por `.env`,
+        asi que un JSON aparte, no variables `WOMPI_*` sueltas, es la unica
+        forma practica de guardar credenciales de MAS de un comercio.
+
+        Forma del archivo:
+
+            {
+              "com_xxxxxxxxxxxx": {
+                "public_key": "pub_test_...",
+                "private_key": "prv_test_...",
+                "integrity_secret": "test_integrity_...",
+                "events_secret": "test_events_..."
+              },
+              "com_yyyyyyyyyyyy": { ... }
+            }
+
+        Cada entrada se valida igual que antes (`ConfiguracionWompi.
+        __post_init__`: faltan credenciales, o el prefijo de la llave
+        publica no coincide con AGORA_AMBIENTE). Un comercio del catalogo
+        que no tenga entrada aca no puede cobrar contra Wompi --
+        `SelectorDePasarela.para(ese_comercio_id)` levanta
+        `ComercioSinCredencialesWompi` en el momento de usarlo, no al
+        arrancar (agregar un comercio nuevo al catalogo no exige reiniciar
+        con TODAS las credenciales ya resueltas).
+
+        La URL que cada comercio real tiene que registrar en su propio
+        dashboard de Wompi (seccion Eventos) NO vive en este archivo -- se
+        arma sola a partir del `comercio_id`: ver el docstring de
+        `entry_points/webhook_wompi/wompi.py`.
+
+    AGORA_CLASIFICADOR  hibrido | reglas | apagado   (default: hibrido)
+        Migracion a agentes, etapa 1 (`docs/arquitectura-agentes/etapa-1-agentes-
+        clasificador-de-intencion.md`): como decide el agente la intencion de cada mensaje
+        antes de ejecutar el turno.
+          hibrido  reglas deterministicas primero; si se abstienen, una
+                   llamada extra a DeepSeek para clasificar (con historial).
+          reglas   solo reglas; lo que no resuelven va por la ruta de
+                   respaldo (las seis herramientas, como antes). Sin costo
+                   extra de API.
+          apagado  sin clasificador: el agente de la etapa 7 tal cual. Es el
+                   interruptor para una demo si el enrutamiento molesta.
+        Solo tiene efecto si hay DEEPSEEK_API_KEY (sin ella no hay agente).
+
+    AGORA_TRAZAS        archivo .jsonl de trazabilidad del agente
+        (default: al lado de AGORA_BITACORA, `trazas.jsonl`)
+        Una linea por turno de chat, con la cadena completa de decisiones:
+        que clasifico el orquestador y con que confianza, que agente
+        atendio, que herramientas se le ofrecieron al modelo, cuales pidio,
+        cuales se le RECHAZARON por estar fuera de ruta, que documentacion
+        se le inyecto y de que archivos, y cuanto tardo.
+        Archivo aparte de `recibos.jsonl` a proposito: ese es la evidencia
+        del experimento de dinero y no se mezcla con transcripciones. Se lee
+        con `python -m agora cli trazas --seguir`.
+        Contiene lo que escribio la persona: tratarlo como transcripcion.
+
+    AGORA_ORQUESTACION  grafo | directo   (default: grafo)
+        Migracion a agentes, etapa 3 (`docs/arquitectura-agentes/etapa-3-agentes-
+        grafo-langgraph.md`): como corre el turno.
+          grafo    el turno pasa por un grafo de LangGraph (orquestador ->
+                   trabajador -> fin). Mismo comportamiento que `directo`:
+                   los nodos llaman a los mismos metodos del agente. Exige
+                   `langgraph` instalado (`pip install -r requirements.txt`).
+          directo  el agente de las etapas 1-2 tal cual, sin grafo ni
+                   dependencia de LangGraph. Es el interruptor para una demo
+                   (o para un venv que todavia no instalo langgraph).
+        Solo tiene efecto si hay DEEPSEEK_API_KEY (sin ella no hay agente).
+
+    OPENAI_API_KEY      llave de OpenAI para embeddings (migracion a agentes,
+        etapa 2). Opcional, igual que DEEPSEEK_API_KEY: sin ella el nodo de
+        soporte contesta sin documentacion recuperada (como en la etapa 1) y
+        el resto de la app no cambia. Solo se usa para EMBEDDINGS de la
+        documentacion de soporte -- el chat sigue siendo DeepSeek.
+    AGORA_EMBEDDINGS_MODELO   default text-embedding-3-small.
+    AGORA_SOPORTE_DOCUMENTOS  carpeta del corpus de soporte (default:
+        docs/soporte). Solo se lee si hay OPENAI_API_KEY, y entonces tiene
+        que existir: una llave configurada con un corpus inexistente es un
+        error de configuracion, no algo para descubrir en la primera
+        pregunta de una persona.
+
+    PAGADOR_EMAIL / PAGADOR_NOMBRE / PAGADOR_TELEFONO / PAGADOR_DOCUMENTO / PAGADOR_TIPO_DOC
+        El `customer_data` de cada cobro. Importan de verdad: un cobro sin
+        `customer_data` es el perfil que el antifraude de Wompi lee como fraude
+        (`docs/utils/decline-afe.md`).
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Mapping
+
+from dotenv import load_dotenv
+
+from ...driven_adapters.pasarela_wompi.config import ConfiguracionWompi
+from ...driven_adapters.pasarela_wompi.config import (
+    ConfiguracionInvalida as ConfiguracionWompiInvalida,
+)
+from ...model.pago.modelo import Ambiente
+
+
+
+def _raiz_del_repo() -> Path:
+    """La carpeta que tiene `pyproject.toml`, subiendo desde este archivo.
+
+    Por marcador y no por `parent.parent.parent`: el refactor a la Clean
+    Architecture de Bancolombia mueve este modulo, y una raiz mal contada no
+    falla -- apunta `agora.db` a otra carpeta y SQLite crea ahi una base
+    vacia sin avisar (roadmap, riesgo R4)."""
+    for carpeta in Path(__file__).resolve().parents:
+        if (carpeta / "pyproject.toml").is_file():
+            return carpeta
+    raise RuntimeError("no se encontro pyproject.toml subiendo desde " + __file__)
+
+
+RAIZ_REPO = _raiz_del_repo()
+BITACORA_POR_DEFECTO = RAIZ_REPO / "agora_datos" / "recibos.jsonl"
+NOMBRE_DE_TRAZAS = "trazas.jsonl"
+SQLITE_POR_DEFECTO = RAIZ_REPO / "agora_datos" / "agora.db"
+COMERCIOS_WOMPI_POR_DEFECTO = RAIZ_REPO / "agora_datos" / "secretos" / "comercios_wompi.json"
+SOPORTE_DOCUMENTOS_POR_DEFECTO = RAIZ_REPO / "docs" / "soporte"
+# Mismo criterio que DEEPSEEK_MODELO_POR_DEFECTO: se repite aca en vez de
+# importarlo de `driven_adapters/embeddings_openai/config.py`.
+EMBEDDINGS_MODELO_POR_DEFECTO = "text-embedding-3-small"
+
+# `deepseek-chat` de nuevo aca, no importado de `driven_adapters/llm_deepseek/
+# config.py`: `app_service/config/` no deberia depender de la forma interna de un
+# adaptador solo para copiar un default.
+DEEPSEEK_MODELO_POR_DEFECTO = "deepseek-chat"
+
+# A proposito NO en un dominio reservado: un correo en `example.com` fue el
+# que produjo el rechazo real por antifraude (`docs/utils/decline-afe.md`).
+# Un default que reproduce esa senal sin que nadie lo pida haria que la
+# pasarela simulada declinara por defecto y confundiria una primera corrida.
+# Para reproducir el hallazgo a proposito, use un correo en `example.com`
+# (ver `driven_adapters/pasarela_simulada/guion.py`).
+CORREO_POR_DEFECTO = "demo@agora.local"
+
+MODOS_CLASIFICADOR = ("hibrido", "reglas", "apagado")
+CLASIFICADOR_POR_DEFECTO = "hibrido"
+
+# Migracion a agentes, etapa 3 -- ver AGORA_ORQUESTACION en el docstring.
+MODOS_ORQUESTACION = ("grafo", "directo")
+ORQUESTACION_POR_DEFECTO = "grafo"
+
+
+class ConfiguracionInvalida(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class ConfiguracionAgora:
+    ambiente: Ambiente
+    pasarela: str  # "simulada" | "wompi"
+    correo_pagador: str
+    datos_pagador: dict[str, str] = field(default_factory=dict)
+    bitacora_path: Path = BITACORA_POR_DEFECTO
+    # Trazabilidad del agente: una linea por turno de chat. Archivo APARTE de
+    # `bitacora_path` a proposito -- `recibos.jsonl` es la evidencia del
+    # experimento de dinero y no se diluye con transcripciones, que tienen
+    # otro volumen y otra vida util. Ver AGORA_TRAZAS en el docstring.
+    trazas_path: Path = BITACORA_POR_DEFECTO.parent / NOMBRE_DE_TRAZAS
+    # Multi-comercio: registro de credenciales por comercio_id, no una
+    # unica `ConfiguracionWompi`. Vacio cuando `pasarela == "simulada"` (no
+    # hace falta credenciales de nadie para la demo sin dinero real).
+    wompi: dict[str, ConfiguracionWompi] = field(default_factory=dict)
+    persistencia: str = "memoria"  # "memoria" | "sqlite"
+    sqlite_path: Path = SQLITE_POR_DEFECTO
+    # Vacio = sin agente de chat disponible (`entry_points/cli/` sigue sirviendo
+    # para enrolar/revocar/emitir/pagar a mano). A diferencia de las demas
+    # variables de este archivo, esta SI puede quedar vacia sin que
+    # `leer_configuracion` la rechace: el resto de la app (mandatos, cobros,
+    # catalogo) no depende de que haya una llave de DeepSeek.
+    deepseek_llave_api: str = ""
+    deepseek_modelo: str = DEEPSEEK_MODELO_POR_DEFECTO
+    # Migracion a agentes, etapa 1 -- ver AGORA_CLASIFICADOR en el docstring.
+    clasificador_intencion: str = CLASIFICADOR_POR_DEFECTO
+    # Migracion a agentes, etapa 3 -- ver AGORA_ORQUESTACION en el docstring.
+    orquestacion: str = ORQUESTACION_POR_DEFECTO
+    # Migracion a agentes, etapa 2 -- ver OPENAI_API_KEY en el docstring.
+    openai_llave_api: str = ""
+    embeddings_modelo: str = EMBEDDINGS_MODELO_POR_DEFECTO
+    soporte_documentos_path: Path = SOPORTE_DOCUMENTOS_POR_DEFECTO
+
+    def __post_init__(self) -> None:
+        if self.clasificador_intencion not in MODOS_CLASIFICADOR:
+            raise ConfiguracionInvalida(
+                f"AGORA_CLASIFICADOR='{self.clasificador_intencion}' invalido: use "
+                + " | ".join(f"'{m}'" for m in MODOS_CLASIFICADOR)
+            )
+        if self.orquestacion not in MODOS_ORQUESTACION:
+            raise ConfiguracionInvalida(
+                f"AGORA_ORQUESTACION='{self.orquestacion}' invalido: use "
+                + " | ".join(f"'{m}'" for m in MODOS_ORQUESTACION)
+            )
+        if self.pasarela not in ("simulada", "wompi"):
+            raise ConfiguracionInvalida(
+                f"AGORA_PASARELA='{self.pasarela}' invalido: use 'simulada' o 'wompi'"
+            )
+        if self.pasarela == "wompi" and not self.wompi:
+            raise ConfiguracionInvalida(
+                "AGORA_PASARELA=wompi exige al menos un comercio con "
+                "credenciales en el registro (AGORA_WOMPI_COMERCIOS, "
+                "default agora_datos/secretos/comercios_wompi.json)"
+            )
+        if self.persistencia not in ("memoria", "sqlite"):
+            raise ConfiguracionInvalida(
+                f"AGORA_PERSISTENCIA='{self.persistencia}' invalido: use 'memoria' o 'sqlite'"
+            )
+        if (
+            self.pasarela == "wompi"
+            and self.ambiente is Ambiente.PRODUCCION
+            and self.persistencia == "memoria"
+        ):
+            # `LibroDeConsumoEnMemoria` pierde el consumo acumulado si el
+            # proceso reinicia -- un mandato que se creia agotado vuelve a
+            # estar fresco. Contra dinero real (wompi + produccion) eso no es
+            # aceptable.
+            # Se aplica al PROCESO completo, no comercio por comercio: los N
+            # comercios reales de un mismo proceso comparten la misma
+            # persistencia (`app_service/config/contenedor.py` arma un solo
+            # `LibroDeConsumo`), asi que si CUALQUIERA de ellos cobra contra
+            # produccion, todos necesitan sqlite. No es un guardarrail que
+            # se pueda saltar con una bandera: quien necesite reproducir ese
+            # estado lo hace explicitamente instanciando los adaptadores en
+            # memoria a mano, no a traves de `leer_configuracion`.
+            raise ConfiguracionInvalida(
+                "AGORA_PASARELA=wompi en AGORA_AMBIENTE=produccion exige "
+                "AGORA_PERSISTENCIA=sqlite: la persistencia en memoria no "
+                "sobrevive un reinicio y permitiria reusar un mandato agotado"
+            )
+
+
+def _cargar_registro_wompi(ruta: Path, ambiente: Ambiente) -> dict[str, ConfiguracionWompi]:
+    """Lee el JSON de credenciales por comercio. Cada entrada se traduce a
+    una `ConfiguracionWompi` propia -- multiples comercios en el mismo
+    proceso es justo lo que ese tipo ya soporta desde la etapa 2 (leer el
+    entorno UNA vez, circular como objeto inmutable despues, sin que
+    `ClienteWompi` vuelva a tocar `os.environ`)."""
+    if not ruta.exists():
+        raise ConfiguracionInvalida(
+            f"AGORA_PASARELA=wompi pero no existe el registro de credenciales "
+            f"'{ruta}' -- cree el archivo (ver el docstring de este modulo) "
+            "o apunte AGORA_WOMPI_COMERCIOS a otro."
+        )
+    try:
+        crudo = json.loads(ruta.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise ConfiguracionInvalida(f"'{ruta}' no es JSON valido: {exc}") from exc
+    if not isinstance(crudo, dict) or not crudo:
+        raise ConfiguracionInvalida(
+            f"'{ruta}' tiene que ser un objeto JSON no vacio, comercio_id -> credenciales"
+        )
+
+    registro: dict[str, ConfiguracionWompi] = {}
+    for comercio_id, entrada in crudo.items():
+        if not isinstance(entrada, dict):
+            raise ConfiguracionInvalida(
+                f"'{ruta}': la entrada de '{comercio_id}' tiene que ser un objeto JSON"
+            )
+        try:
+            registro[comercio_id] = ConfiguracionWompi(
+                ambiente=ambiente,
+                llave_publica=entrada.get("public_key", ""),
+                llave_privada=entrada.get("private_key", ""),
+                secreto_integridad=entrada.get("integrity_secret", ""),
+                secreto_eventos=entrada.get("events_secret", ""),
+            )
+        except ConfiguracionWompiInvalida as exc:
+            raise ConfiguracionInvalida(f"comercio '{comercio_id}' en '{ruta}': {exc}") from exc
+    return registro
+
+
+def leer_configuracion(entorno: Mapping[str, str]) -> ConfiguracionAgora:
+    """Construye la configuracion a partir de un mapping tipo `os.environ`.
+
+    Recibe el mapping por parametro (en vez de leer `os.environ` adentro)
+    para que quede claro que esta funcion es pura frente a lo que se le pasa,
+    y para que una prueba pueda armar un entorno de mentiras con un `dict`
+    comun sin `monkeypatch`. Quien orquesta el arranque real (un futuro
+    `entry_points/cli/cli.py`) es quien de verdad lee `os.environ` y se lo
+    pasa aqui.
+    """
+    ambiente = Ambiente(entorno.get("AGORA_AMBIENTE", "sandbox"))
+    pasarela = entorno.get("AGORA_PASARELA", "simulada")
+    correo = entorno.get("PAGADOR_EMAIL", CORREO_POR_DEFECTO)
+
+    campos_pagador = {
+        "full_name": entorno.get("PAGADOR_NOMBRE", ""),
+        "phone_number": entorno.get("PAGADOR_TELEFONO", ""),
+        "legal_id": entorno.get("PAGADOR_DOCUMENTO", ""),
+        "legal_id_type": entorno.get("PAGADOR_TIPO_DOC", "CC"),
+    }
+    datos_pagador = {k: v for k, v in campos_pagador.items() if v}
+    if "legal_id" not in datos_pagador:
+        datos_pagador.pop("legal_id_type", None)
+
+    bitacora = Path(entorno["AGORA_BITACORA"]) if "AGORA_BITACORA" in entorno else BITACORA_POR_DEFECTO
+    # Por defecto, al lado de la bitacora de recibos. Derivarlo en vez de
+    # fijarlo hace que cualquiera que ya aisla `AGORA_BITACORA` (las pruebas,
+    # una corrida de demo en una carpeta aparte) aisle las trazas tambien,
+    # sin tener que enterarse de que existe una variable nueva.
+    trazas = (
+        Path(entorno["AGORA_TRAZAS"])
+        if "AGORA_TRAZAS" in entorno
+        else bitacora.parent / NOMBRE_DE_TRAZAS
+    )
+    persistencia = entorno.get("AGORA_PERSISTENCIA", "memoria")
+    sqlite_path = (
+        Path(entorno["AGORA_SQLITE_PATH"]) if "AGORA_SQLITE_PATH" in entorno else SQLITE_POR_DEFECTO
+    )
+    deepseek_llave_api = entorno.get("DEEPSEEK_API_KEY", "")
+    deepseek_modelo = entorno.get("DEEPSEEK_MODELO", DEEPSEEK_MODELO_POR_DEFECTO)
+    clasificador_intencion = entorno.get("AGORA_CLASIFICADOR", CLASIFICADOR_POR_DEFECTO)
+    orquestacion = entorno.get("AGORA_ORQUESTACION", ORQUESTACION_POR_DEFECTO)
+    openai_llave_api = entorno.get("OPENAI_API_KEY", "")
+    embeddings_modelo = entorno.get("AGORA_EMBEDDINGS_MODELO", EMBEDDINGS_MODELO_POR_DEFECTO)
+    soporte_documentos_path = (
+        Path(entorno["AGORA_SOPORTE_DOCUMENTOS"])
+        if "AGORA_SOPORTE_DOCUMENTOS" in entorno
+        else SOPORTE_DOCUMENTOS_POR_DEFECTO
+    )
+    if not soporte_documentos_path.is_absolute():
+        soporte_documentos_path = RAIZ_REPO / soporte_documentos_path
+    if openai_llave_api and not soporte_documentos_path.is_dir():
+        raise ConfiguracionInvalida(
+            f"OPENAI_API_KEY esta configurada pero no existe la carpeta de "
+            f"documentos de soporte '{soporte_documentos_path}' "
+            "(AGORA_SOPORTE_DOCUMENTOS, default docs/soporte)"
+        )
+
+    wompi: dict[str, ConfiguracionWompi] = {}
+    if pasarela == "wompi":
+        ruta_comercios = (
+            Path(entorno["AGORA_WOMPI_COMERCIOS"])
+            if "AGORA_WOMPI_COMERCIOS" in entorno
+            else COMERCIOS_WOMPI_POR_DEFECTO
+        )
+        wompi = _cargar_registro_wompi(ruta_comercios, ambiente)
+
+    return ConfiguracionAgora(
+        ambiente=ambiente,
+        pasarela=pasarela,
+        correo_pagador=correo,
+        datos_pagador=datos_pagador,
+        bitacora_path=bitacora,
+        trazas_path=trazas,
+        wompi=wompi,
+        persistencia=persistencia,
+        sqlite_path=sqlite_path,
+        deepseek_llave_api=deepseek_llave_api,
+        deepseek_modelo=deepseek_modelo,
+        clasificador_intencion=clasificador_intencion,
+        orquestacion=orquestacion,
+        openai_llave_api=openai_llave_api,
+        embeddings_modelo=embeddings_modelo,
+        soporte_documentos_path=soporte_documentos_path,
+    )
+
+
+def desde_el_entorno() -> ConfiguracionAgora:
+    """La configuracion de un arranque real: el `.env` de la raiz del repo
+    (sin pisar lo que ya este exportado en la sesion) y despues `os.environ`.
+    Es lo unico de este modulo que toca el entorno: `leer_configuracion`
+    sigue recibiendo el mapping por parametro, para las pruebas."""
+    load_dotenv(RAIZ_REPO / ".env")
+    return leer_configuracion(os.environ)
