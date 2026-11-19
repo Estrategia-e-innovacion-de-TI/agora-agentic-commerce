@@ -212,7 +212,3 @@ documentada a propósito (ADR-8 en [`docs/arquitectura.md`](docs/arquitectura.md
 - [`docs/variables-de-entorno.md`](docs/variables-de-entorno.md) — la
   plantilla comentada del `.env`.
 - [`docs/diagramas/`](docs/diagramas/) — los diagramas en Mermaid.
-- [`docs/utils/`](docs/utils/) — investigación de rieles de pago, el hallazgo
-  del antifraude de Wompi y la viabilidad multi-comercio.
-- [`evolucion-refactor/`](evolucion-refactor/) — la migración a la Clean
-  Architecture de Bancolombia, fase por fase.
