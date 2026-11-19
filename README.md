@@ -162,12 +162,7 @@ La pregunta no es "¿el agente puede pagar?" sino "¿cuánto detiene el mandato
 cuando algo sale mal?". Por eso existe un brazo de comparación: el motor de
 pagos puede correr sin exigir el mandato (`exigir_mandato=False`) y registrar
 igual las violaciones. La diferencia entre las dos corridas es el efecto real
-del control — y el primer resultado fue un cobro de 15.000 COP aprobado por
-la pasarela contra un mandato que autorizaba 8.000. La bitácora de cobros
-(`agora_datos/recibos.jsonl`) es esa evidencia: nunca se sobreescribe.
-
-Los topes duros nunca se apagan por parámetro: si se pudiera, apagar el
-control que se está midiendo apagaría también la protección del dinero real.
+del control.
 
 ## Qué prueba esto, y qué no
 
